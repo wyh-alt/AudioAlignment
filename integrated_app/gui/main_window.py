@@ -137,9 +137,8 @@ class MainWidget(QWidget):
 
         # 模型与阈值
         self.use_model_chk = QCheckBox("首轮使用模型")
-        self.model_edit = QLineEdit()
+        self.model_edit = DropLineEdit()
         self.model_edit.setPlaceholderText("选择 .joblib 模型文件，可拖拽")
-        self.model_edit.setAcceptDrops(True)
         btn_model = QPushButton("选择模型…")
 
         grid.addWidget(self.use_model_chk, 4, 0)
