@@ -12,6 +12,57 @@ import shutil
 from pathlib import Path
 import subprocess
 
+def create_simple_ico():
+    """创建一个简单的ICO图标文件"""
+    project_root = Path(__file__).resolve().parent.parent
+    ico_path = project_root / 'integrated_app' / 'assets' / 'icon.ico'
+    
+    if ico_path.exists():
+        return True
+    
+    try:
+        from PIL import Image, ImageDraw
+        
+        # 创建一个简单的音频对齐主题图标
+        size = 256
+        img = Image.new('RGBA', (size, size), (15, 23, 42, 255))  # 深色背景
+        draw = ImageDraw.Draw(img)
+        
+        # 绘制简单的波形和对齐线
+        # 波形1（蓝色）
+        for i in range(0, size, 20):
+            x = i + 20
+            if x < size - 40:
+                y1 = size // 3 + int(20 * (i % 40 - 20) / 20)
+                y2 = size // 3 + int(20 * ((i + 20) % 40 - 20) / 20)
+                draw.line([(x, y1), (x + 20, y2)], fill=(46, 125, 255, 255), width=4)
+        
+        # 波形2（青色）
+        for i in range(0, size, 20):
+            x = i + 20
+            if x < size - 40:
+                y1 = 2 * size // 3 + int(20 * (i % 40 - 20) / 20)
+                y2 = 2 * size // 3 + int(20 * ((i + 20) % 40 - 20) / 20)
+                draw.line([(x, y1), (x + 20, y2)], fill=(125, 211, 252, 255), width=4)
+        
+        # 对齐线（黄色）
+        draw.line([(size//2, 40), (size//2, size-40)], fill=(245, 158, 11, 255), width=8)
+        draw.ellipse([(size//2-15, size//2-15), (size//2+15, size//2+15)], fill=(245, 158, 11, 255))
+        
+        # 保存为ICO格式
+        img.save(ico_path, format='ICO', sizes=[(256, 256), (128, 128), (64, 64), (32, 32), (16, 16)])
+        
+        print(f"已生成ICO图标: {ico_path}")
+        return True
+        
+    except ImportError:
+        print("警告: 缺少Pillow依赖，将使用默认图标")
+        print("安装依赖: pip install pillow")
+        return False
+    except Exception as e:
+        print(f"图标生成失败: {e}")
+        return False
+
 def build_exe():
     """打包为 exe 文件"""
     print("开始打包音频对齐工具...")
@@ -23,13 +74,16 @@ def build_exe():
     # 确保在正确的目录
     os.chdir(project_root)
     
+    # 创建图标
+    create_simple_ico()
+    
     # PyInstaller 命令
     cmd = [
         'pyinstaller',
         '--name=音频对齐工具',
         '--windowed',  # 无控制台窗口
         '--onefile',   # 打包为单个文件
-        '--icon=integrated_app/assets/icon.svg',
+        '--icon=integrated_app/assets/icon.ico',
         '--add-data=integrated_app/assets;integrated_app/assets',
         '--add-data=audio_algnment_checker2-master;audio_algnment_checker2-master',
         '--add-data=原唱伴奏对齐;原唱伴奏对齐',
