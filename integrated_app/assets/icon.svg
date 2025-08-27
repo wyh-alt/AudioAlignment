@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2E7DFF"/>
+      <stop offset="100%" stop-color="#14C1A3"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="256" height="256" rx="24" ry="24" fill="#0F172A"/>
+  <!-- Waveform top -->
+  <path d="M16 80 C 36 60, 44 120, 64 100 S 92 80, 112 100 S 140 120, 160 96 S 188 76, 208 100 S 232 120, 240 96" stroke="url(#g1)" stroke-width="6" fill="none"/>
+  <!-- Waveform bottom -->
+  <path d="M16 176 C 36 156, 44 216, 64 196 S 92 176, 112 196 S 140 216, 160 192 S 188 172, 208 196 S 232 216, 240 192" stroke="#7DD3FC" stroke-width="6" fill="none" opacity="0.9"/>
+  <!-- Alignment marker -->
+  <rect x="124" y="48" width="8" height="160" rx="4" fill="#F59E0B"/>
+  <circle cx="128" cy="128" r="10" fill="#F59E0B"/>
+  <!-- Tick marks -->
+  <g stroke="#334155" stroke-width="2" opacity="0.7">
+    <line x1="32" y1="48" x2="32" y2="208"/>
+    <line x1="80" y1="48" x2="80" y2="208"/>
+    <line x1="176" y1="48" x2="176" y2="208"/>
+    <line x1="224" y1="48" x2="224" y2="208"/>
+  </g>
+</svg>

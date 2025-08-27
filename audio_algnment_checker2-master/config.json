@@ -1,0 +1,22 @@
+{
+    "alignment_threshold": 0.015,
+    "id_pattern": "(\\d+)",
+    "recent_files": [
+        "Z:/音编组/原唱伴奏自动对齐测试/鲁来这/525/原唱/1672916-原唱.wav",
+        "Z:/音编组/原唱伴奏自动对齐测试/鲁来这/525/伴奏/1672916-伴奏.wav",
+        "F:/Work/【Agent开发】项目包/audio_algnment_checker2/test2/原唱/YPD702-原唱.wav",
+        "F:/Work/【Agent开发】项目包/audio_algnment_checker2/test2/伴奏/YPD702-伴奏.wav"
+    ],
+    "window_size": [
+        1200,
+        800
+    ],
+    "window_pos": [
+        360,
+        85
+    ],
+    "enable_vocal_exclusion": true,
+    "vocal_energy_ratio_threshold": 12.0,
+    "vocal_frame_duration": 0.2,
+    "min_non_vocal_segment_length": 1.0
+}
