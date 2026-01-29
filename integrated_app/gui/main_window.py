@@ -250,6 +250,7 @@ class MainWidget(QWidget):
         self.progress.setValue(0)
         self.log.clear()
         self.result_label.setText("")
+        self.table.setRowCount(0)  # 清除上一次的处理结果
         self.start_btn.setEnabled(False)
 
         self.worker = PipelineWorker(vocal, inst, out, tpl, model_path, use_ml, threshold)
