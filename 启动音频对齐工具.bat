@@ -1,0 +1,3 @@
+@echo off
+echo 正在启动音频对齐工具...
+start "" "C:\Users\Administrator\PycharmProjects\原唱伴奏对齐整合\dist\音频对齐工具.exe"

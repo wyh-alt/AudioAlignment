@@ -24,7 +24,7 @@ from .feature_builder import build_feature_vector_from_analysis
 
 def build_result_text(record: Dict) -> str:
     """
-    将偏移量等信息转成“处理结果”文本，用于写入 Excel。
+    将偏移量等信息转成"处理结果"文本，用于写入 Excel。
     示例：+20.56ms / -105ms / +20.56ms 结尾延长80ms 等。
     """
     status = record.get('status', '')
@@ -32,9 +32,9 @@ def build_result_text(record: Dict) -> str:
 
     # 优先使用记录里的 offset_ms，其次从分析结果里取
     offset_ms = record.get('offset_ms', analysis.get('offset_ms'))
-    # 对于自动对齐成功的结果，我们还会记录实际“处理偏移量”
+    # 对于自动对齐成功的结果，我们还会记录实际"处理偏移量"
     applied_ms = record.get('applied_offset_ms')
-    # 结尾补静音相关信息（用于“仅结尾延长”场景的判断）
+    # 结尾补静音相关信息（用于"仅结尾延长"场景的判断）
     tail_extend_ms = record.get('tail_extend_ms', analysis.get('tail_extend_ms'))
     need_tail_extend = record.get('need_tail_extend', analysis.get('need_tail_extend'))
 
@@ -51,7 +51,7 @@ def build_result_text(record: Dict) -> str:
     parts: List[str] = []
 
     # 基础偏移量描述（保留正负号区分方向）
-    # 优先使用“实际处理偏移量”，否则使用检测得到的偏移量
+    # 优先使用"实际处理偏移量"，否则使用检测得到的偏移量
     ms_value = None
     if applied_ms is not None:
         ms_value = float(applied_ms)
@@ -59,10 +59,10 @@ def build_result_text(record: Dict) -> str:
         ms_value = float(offset_ms)
 
     # 特殊场景：仅结尾延长、未做任何偏移处理的情况
-    # 这类情况在“处理结果/处理偏移量”中固定显示为 0ms
+    # 这类情况在"处理结果/处理偏移量"中固定显示为 0ms
     has_tail_extend = bool(need_tail_extend) or (tail_extend_ms not in (None, 0, 0.0))
     if has_tail_extend:
-        # applied_ms / offset_ms 都视为“没有实质偏移处理”时，显示 0ms
+        # applied_ms / offset_ms 都视为"没有实质偏移处理"时，显示 0ms
         applied_mag = abs(float(applied_ms)) if applied_ms is not None else 0.0
         offset_mag = abs(float(offset_ms)) if offset_ms is not None else 0.0
         # 对于"对齐成功"状态，如果只有结尾延长，优先显示 0ms
@@ -165,9 +165,13 @@ def format_output_filename(template_str: str, file_id: str, vocal_filename: str)
         return f"{file_id}-原唱_已改{ext}"
 
 
-def align_one(vocal_file: str, inst_file: str, output_path: str) -> Tuple[float, float, bool]:
+def align_one(vocal_file: str, inst_file: str, output_path: str, align_duration: bool = True, skip_content_align: bool = False) -> Tuple[float, float, bool]:
     aligner = AlignerAudioProcessor()
-    time_offset, confidence, aligned = aligner.align_audio(vocal_file, inst_file, output_path)
+    time_offset, confidence, aligned = aligner.align_audio(
+        vocal_file, inst_file, output_path,
+        align_duration=align_duration,
+        skip_content_align=skip_content_align
+    )
     return time_offset, confidence, aligned
 
 
@@ -180,6 +184,7 @@ def run_pipeline(
     ml_feature_names: Optional[List[str]] = None,
     first_pass_use_ml: bool = True,
     detector_threshold_ms: float = 20.0,
+    align_duration: bool = False,
     log_cb: Optional[Callable[[str], None]] = None,
     progress_cb: Optional[Callable[[int], None]] = None,
     record_cb: Optional[Callable[[Dict], None]] = None,
@@ -199,31 +204,33 @@ def run_pipeline(
 
     first_pass_records: List[Dict] = []
     all_records: List[Dict] = []
-    # 存放需要进入自动对齐流程的文件对，同时携带首轮分析结果（用于后续“结尾延长”展示）
-    not_aligned_pairs: List[Tuple[str, str, str, Dict]] = []
+    # 存放需要进入自动对齐流程的文件对，同时携带首轮分析结果和"内容是否已对齐"标志
+    # 元组格式: (file_id, vocal_file, inst_file, base_item, content_already_aligned)
+    not_aligned_pairs: List[Tuple[str, str, str, Dict, bool]] = []
 
     for file_id, vocal_file, inst_file in pairs:
         analysis = analyze_pair(detector, inst_file, vocal_file)
         system_is_aligned = bool(analysis.get('is_aligned', False))
         has_duration_mismatch = bool(analysis.get('has_duration_mismatch', False))
 
-        # 首轮“是否对齐”的判断（系统 + 可选模型）
+        # 首轮"是否对齐"的判断（系统 + 可选模型）
         predicted_is_aligned = system_is_aligned
         if first_pass_use_ml and ml_model and ml_feature_names:
             label = predict_with_model(analysis, ml_model, ml_feature_names)
             # 约定：1 表示对齐，0 表示不对齐
             predicted_is_aligned = (label == 1)
 
-        # 时长差（秒），用于判断是否需要“结尾补静音/裁剪”
+        # 时长差（秒），用于判断是否需要"结尾补静音/裁剪"
         # duration1: 参考伴奏时长，duration2: 原唱时长
         duration1_sec = float(analysis.get('duration1', 0.0))
         duration2_sec = float(analysis.get('duration2', 0.0))
-        # 保留有符号差值：>0 表示伴奏更长，需要“延长”原唱尾部；<0 表示原唱更长，需要“裁剪”原唱尾部
+        # 保留有符号差值：>0 表示伴奏更长，需要"延长"原唱尾部；<0 表示原唱更长，需要"裁剪"原唱尾部
         raw_duration_diff_sec = duration1_sec - duration2_sec
         duration_diff_abs_sec = abs(raw_duration_diff_sec)
         # 使用与阈值相同的级别来判断是否需要尾部长度调整：> detector_threshold_ms 视为需要处理
         tail_threshold_sec = detector_threshold_ms / 1000.0
-        need_tail_extend = duration_diff_abs_sec > tail_threshold_sec
+        # 仅当启用"总时长对齐"选项时，才考虑时长差异
+        need_tail_extend = align_duration and (duration_diff_abs_sec > tail_threshold_sec)
         # 记录预计需要调整的毫秒数（带正负号，用于区分延长/裁剪）
         tail_extend_ms = raw_duration_diff_sec * 1000.0 if need_tail_extend else 0.0
 
@@ -241,13 +248,15 @@ def run_pipeline(
         }
         first_pass_records.append(base_item)
 
-        # 只有在“偏移在阈值内 且 时长差小于阈值”时，才真正视作“无需对齐”
+        # 只有在"偏移在阈值内 且 时长差小于阈值"时，才真正视作"无需对齐"
         # 一旦需要补尾（结尾静音延长），也要进入自动对齐流程
         can_skip_align = predicted_is_aligned and (not need_tail_extend)
 
         if not can_skip_align:
-            # 将首轮分析结果一并带入，方便后续生成“处理结果”文本
-            not_aligned_pairs.append((file_id, vocal_file, inst_file, base_item))
+            # 将首轮分析结果一并带入，方便后续生成"处理结果"文本
+            # 同时记录"内容是否已对齐"标志，用于决定是否跳过内容对齐（仅做时长调整）
+            content_already_aligned = predicted_is_aligned
+            not_aligned_pairs.append((file_id, vocal_file, inst_file, base_item, content_already_aligned))
         else:
             # 无需对齐，直接计入全量结果
             record = dict(base_item)
@@ -263,13 +272,18 @@ def run_pipeline(
 
     # 自动对齐并进行二次检测（不使用ML）
     final_success_records: List[Dict] = []
-    for file_id, vocal_file, inst_file, base_item in not_aligned_pairs:
+    for file_id, vocal_file, inst_file, base_item, content_already_aligned in not_aligned_pairs:
         out_name = format_output_filename(naming_template, file_id, vocal_file)
         out_path = os.path.join(output_dir, out_name)
 
         # align_one 返回的是实际应用在原唱上的偏移量（秒）
-        time_offset, _, align_ok = align_one(vocal_file, inst_file, out_path)
-        # 从首轮分析中取出“结尾补尾”的相关信息，后续无论成功/失败都写入记录
+        # 如果内容已对齐（仅需时长调整），则跳过内容对齐计算
+        time_offset, _, align_ok = align_one(
+            vocal_file, inst_file, out_path,
+            align_duration=align_duration,
+            skip_content_align=content_already_aligned
+        )
+        # 从首轮分析中取出"结尾补尾"的相关信息，后续无论成功/失败都写入记录
         first_need_tail = bool(base_item.get('need_tail_extend', False))
         first_tail_ms = float(base_item.get('tail_extend_ms', 0.0)) if base_item.get('tail_extend_ms') is not None else 0.0
 
@@ -311,7 +325,7 @@ def run_pipeline(
                  # 实际处理偏移量
                 'applied_offset_seconds': applied_offset_seconds,
                 'applied_offset_ms': applied_offset_ms,
-                # 记录首轮检测到的“是否需要补尾”以及补尾毫秒数，用于“处理结果”展示
+                # 记录首轮检测到的"是否需要补尾"以及补尾毫秒数，用于"处理结果"展示
                 'need_tail_extend': first_need_tail,
                 'tail_extend_ms': first_tail_ms,
                 'analysis_data': second,
@@ -360,7 +374,7 @@ def run_pipeline(
             total_second = max(1, len(not_aligned_pairs))
             progress_cb(50 + int(second_done / total_second * 50))
 
-    # 生成Excel前，为每条记录生成“处理结果”文本
+    # 生成Excel前，为每条记录生成"处理结果"文本
     for rec in final_success_records:
         rec['result'] = build_result_text(rec)
     for rec in all_records:
@@ -388,8 +402,8 @@ def run_pipeline(
 
     def _write_excel(filepath: str, records: List[Dict], columns: List[str], headers_cn: List[str]):
         df = pd.DataFrame(records, columns=columns)
-        # 将尾部延长毫秒数转换为形如“427ms”的文本
-        # 对于“二次检测未通过”等状态，不显示结尾延长信息（置为空）
+        # 将尾部延长毫秒数转换为形如"427ms"的文本
+        # 对于"二次检测未通过"等状态，不显示结尾延长信息（置为空）
         if 'tail_extend_ms' in df.columns:
             tail_series = pd.to_numeric(df['tail_extend_ms'], errors='coerce')
             # 在全量结果表中可以通过 status 字段判断是否需要隐藏
@@ -420,7 +434,7 @@ def run_pipeline(
             wb = writer.book
             _autofit_columns(wb, 'Sheet1')
 
-    # 写入成功结果（中文表头，“处理偏移量”单独一列，“结尾延长”单独一列）
+    # 写入成功结果（中文表头，"处理偏移量"单独一列，"结尾延长"单独一列）
     success_cols = ['id', 'ref_file', 'aligned_vocal', 'result', 'tail_extend_ms']
     success_headers = ['编号', '参考文件', '对齐后原唱', '处理偏移量', '结尾延长']
     if final_success_records:
@@ -428,7 +442,7 @@ def run_pipeline(
     else:
         _write_excel(excel_success, [], success_cols, success_headers)
 
-    # 写入全量结果（中文表头，“处理偏移量”单独一列，“结尾延长”单独一列）
+    # 写入全量结果（中文表头，"处理偏移量"单独一列，"结尾延长"单独一列）
     all_cols = ['id', 'ref_file', 'align_file', 'status', 'output_file', 'result', 'tail_extend_ms']
     all_headers = ['编号', '参考文件', '需对齐文件', '状态', '输出文件', '处理偏移量', '结尾延长']
     if all_records:
@@ -437,5 +451,3 @@ def run_pipeline(
         _write_excel(excel_all, [], all_cols, all_headers)
 
     return all_records, final_success_records, excel_all, excel_success
-
-

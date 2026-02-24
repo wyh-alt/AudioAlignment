@@ -43,7 +43,7 @@ class PipelineWorker(QThread):
 
     def __init__(self, vocal_dir: str, inst_dir: str, output_dir: str,
                  naming_template: str, model_path: Optional[str], use_ml: bool,
-                 threshold_ms: float):
+                 threshold_ms: float, align_duration: bool = False):
         super().__init__()
         self.vocal_dir = vocal_dir
         self.inst_dir = inst_dir
@@ -52,6 +52,7 @@ class PipelineWorker(QThread):
         self.model_path = model_path
         self.use_ml = use_ml
         self.threshold_ms = threshold_ms
+        self.align_duration = align_duration
 
     def run(self):
         try:
@@ -87,6 +88,7 @@ class PipelineWorker(QThread):
                 ml_feature_names=feature_names,
                 first_pass_use_ml=self.use_ml and ml_model is not None,
                 detector_threshold_ms=self.threshold_ms,
+                align_duration=self.align_duration,
                 log_cb=log_cb,
                 progress_cb=progress_cb,
                 record_cb=record_cb,
@@ -151,6 +153,13 @@ class MainWidget(QWidget):
         self.threshold_spin.setValue(20.0)
         grid.addWidget(QLabel("检测阈值(ms)"), 5, 0)
         grid.addWidget(self.threshold_spin, 5, 1)
+
+        self.align_duration_chk = QCheckBox("总时长对齐")
+        self.align_duration_chk.setChecked(False)
+        self.align_duration_chk.setToolTip(
+            "勾选后，除对齐音频内容外，还会在结尾填充静音或裁切以对齐原唱与伴奏的总时长"
+        )
+        grid.addWidget(self.align_duration_chk, 6, 0, 1, 2)
 
         main_layout.addWidget(path_group)
 
@@ -253,7 +262,8 @@ class MainWidget(QWidget):
         self.table.setRowCount(0)  # 清除上一次的处理结果
         self.start_btn.setEnabled(False)
 
-        self.worker = PipelineWorker(vocal, inst, out, tpl, model_path, use_ml, threshold)
+        align_duration = self.align_duration_chk.isChecked()
+        self.worker = PipelineWorker(vocal, inst, out, tpl, model_path, use_ml, threshold, align_duration)
         self.worker.log_signal.connect(self._append_log)
         self.worker.progress_signal.connect(self._set_progress)
         self.worker.record_signal.connect(self._append_record_row)
