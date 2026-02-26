@@ -83,7 +83,9 @@ def build_result_text(record: Dict) -> str:
     if parts:
         return ' '.join(parts)
 
-    # 回退：只返回状态或空字符串
+    # 回退：对于成功的对齐状态，返回"0ms"表示无偏移；其他状态返回状态文本
+    if status == '对齐成功':
+        return '0ms'
     return status or ''
 
 
@@ -316,38 +318,68 @@ def run_pipeline(
         second = analyze_pair(detector, inst_file, out_path)
         second_ok = bool(second.get('is_aligned', False))
         if second_ok:
-            rec = {
-                'id': file_id,
-                'ref_file': os.path.basename(inst_file),
-                'aligned_vocal': os.path.basename(out_path),
-                'offset_seconds': float(second.get('offset_seconds', 0.0)),
-                'offset_ms': float(second.get('offset_ms', 0.0)),
-                 # 实际处理偏移量
-                'applied_offset_seconds': applied_offset_seconds,
-                'applied_offset_ms': applied_offset_ms,
-                # 记录首轮检测到的"是否需要补尾"以及补尾毫秒数，用于"处理结果"展示
-                'need_tail_extend': first_need_tail,
-                'tail_extend_ms': first_tail_ms,
-                'analysis_data': second,
-            }
-            final_success_records.append(rec)
-            record = {
-                'id': file_id,
-                'ref_file': os.path.basename(inst_file),
-                'align_file': os.path.basename(os.path.basename(vocal_file)),
-                'status': '对齐成功',
-                'output_file': os.path.basename(out_path),
-                # 记录残余偏移和实际处理偏移，方便后续展示与排查
-                'offset_seconds': rec['offset_seconds'],
-                'offset_ms': rec['offset_ms'],
-                'applied_offset_seconds': applied_offset_seconds,
-                'applied_offset_ms': applied_offset_ms,
-                'need_tail_extend': first_need_tail,
-                'tail_extend_ms': first_tail_ms,
-            }
-            all_records.append(record)
-            if record_cb:
-                record_cb(record)
+            # 判断是否实际上"无需对齐"：处理偏移量和时长延长都在阈值内
+            # 使用与检测阈值相同的标准（detector_threshold_ms）
+            actual_no_change = (
+                abs(applied_offset_ms) < detector_threshold_ms and
+                abs(first_tail_ms) < detector_threshold_ms
+            )
+            
+            if actual_no_change:
+                # 实际无需对齐，删除输出文件，标记为"无需对齐"
+                try:
+                    os.remove(out_path)
+                except Exception:
+                    pass
+                record = {
+                    'id': file_id,
+                    'ref_file': os.path.basename(inst_file),
+                    'align_file': os.path.basename(vocal_file),
+                    'status': '无需对齐',
+                    'output_file': '',
+                    'offset_seconds': base_item.get('offset_seconds', 0.0),
+                    'offset_ms': base_item.get('offset_ms', 0.0),
+                    'need_tail_extend': False,
+                    'tail_extend_ms': 0.0,
+                    'analysis_data': base_item.get('analysis_data'),
+                }
+                all_records.append(record)
+                if record_cb:
+                    record_cb(record)
+            else:
+                # 真正的对齐成功
+                rec = {
+                    'id': file_id,
+                    'ref_file': os.path.basename(inst_file),
+                    'aligned_vocal': os.path.basename(out_path),
+                    'offset_seconds': float(second.get('offset_seconds', 0.0)),
+                    'offset_ms': float(second.get('offset_ms', 0.0)),
+                     # 实际处理偏移量
+                    'applied_offset_seconds': applied_offset_seconds,
+                    'applied_offset_ms': applied_offset_ms,
+                    # 记录首轮检测到的"是否需要补尾"以及补尾毫秒数，用于"处理结果"展示
+                    'need_tail_extend': first_need_tail,
+                    'tail_extend_ms': first_tail_ms,
+                    'analysis_data': second,
+                }
+                final_success_records.append(rec)
+                record = {
+                    'id': file_id,
+                    'ref_file': os.path.basename(inst_file),
+                    'align_file': os.path.basename(os.path.basename(vocal_file)),
+                    'status': '对齐成功',
+                    'output_file': os.path.basename(out_path),
+                    # 记录残余偏移和实际处理偏移，方便后续展示与排查
+                    'offset_seconds': rec['offset_seconds'],
+                    'offset_ms': rec['offset_ms'],
+                    'applied_offset_seconds': applied_offset_seconds,
+                    'applied_offset_ms': applied_offset_ms,
+                    'need_tail_extend': first_need_tail,
+                    'tail_extend_ms': first_tail_ms,
+                }
+                all_records.append(record)
+                if record_cb:
+                    record_cb(record)
         else:
             # 二次检测未通过
             record = {
